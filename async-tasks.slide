@@ -91,6 +91,12 @@ We now have two way communication with the goroutine.
 - main informs the goroutine
 - the goroutine informs main
 
+## Wait Groups
+
+You can also use waitgroups to block until the goroutine has completed.
+
+.play 4.5.go /^func boring/,/^}/ HLwg
+
 ## Can we make this easier?
 This is a very simplistic example. The real world is complicated.
 
