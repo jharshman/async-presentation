@@ -1,0 +1,144 @@
+# Asynchronous Tasks
+The Golang Way
+
+18 Aug 2020
+
+Josh Harshman
+Senior Software Engineer, Bitly
+josh.harshman@bit.ly
+
+## About Me
+- Senior Software Engineer @ Bitly
+- Been using Go for a while - big fan
+- Maintainer of Cobra and Pflag
+
+## Goal
+
+Discuss
+* How to create goroutines
+* How to communicate with them
+* Gracefully close them
+
+## Wisdom
+
+> "Never start a goroutine without knowing how it will stop".
+
+Dave Cheney
+
+## Simple Goroutine
+Here we have a boring function.
+
+- Prints "hello gophers!" every 2 seconds.
+- Exits after 10 seconds.
+- Goroutine never finishes.
+
+.play 1.go /START OMIT/,/END OMIT/ HLboring
+
+: Here we have a boring function. It gets executed as a goroutine and starts printing "Hello Gophers!" Every 2 seconds.
+: The program exists after 10 seconds, but the goroutine, never exists on it's own. It actually just gets cleaned up after
+: execution, falls out of main.
+: How can we improve upon this to excert a bit more control over the goroutine?
+
+## Control The When
+In this bit of code, we leverage a channel to control _when_ the main function closes rather than being controlled by a timer.
+
+- Gives us a bit more control over the application.
+- Now exits on a SIGINT (ctrl+C).
+
+But...
+- Still no communication with the goroutine.
+- Goroutine is forcibly terminated after main exits.
+
+.play 2.go /START OMIT/,/END OMIT/ HLchannel
+
+: This gives us control over WHEN the program exists. But the goroutine is still not
+: given a chance to close gracefully.
+
+## Start Communicating
+We now start to leverage channels as a method of communicating with the goroutine.
+
+Changes:
+- boring() function now runs the goroutine.
+- passes back a channel for communication.
+- goroutine able to finish. Prints "goodbye"
+
+But...
+- main() still exits too fast.
+
+## Here's that code 
+.code 3.go /^func boring/,/^}/ HLselect
+
+## And the main function
+.play 3.go /^func main/,/^}/ HLsig 
+
+- boring returns a channel we can communicate on.
+- after a SIGINT is received, we pass a value to the sig channel
+which signals the goroutine to break out of it's loop, print goodbye and exit.
+- we prevent main from exiting for 2 miliseconds so the goroutine can print "goodbye".
+
+## Meaningful conversation
+Let's hear the goroutine's side of things.
+
+- Provide a way for the goroutine to inform main that it is done.
+
+.code 4.go /^func boring/,/^}/ HLack
+
+## Updated main function
+
+.play 4.go /^func main/,/^}/ HLack
+
+We now have two way communication with the goroutine.
+- main informs the goroutine
+- the goroutine informs main
+
+## Can we make this easier?
+This is a very simplistic example. The real world is complicated.
+
+We might want to
+- react to errors
+- respond to different signals
+- run shutdown / cleanup jobs
+
+Being such a common pattern, there should be another way...
+
+## Async Package
+github.com/jharshman/async
+
+This package can help facilitate the safe running and closing of concurrent tasks.
+
+.code 5.go
+
+Here we initialize an async.Job literal.
+
+- Run() is intended to do a thing.
+- Close() is intended to stop the thing defined in Run.
+- By default, Close() will be triggered on SIGINT or SIGTERM.
+
+:Signals are settable as we will see in the next slide.
+
+## Listen to syscalls
+
+.code 6.go
+
+Here we set the Signals field to listen for SIGKILL as well.
+
+## Execute()
+
+`Execute()` is a blocking method, it will
+- handle listening for the defined syscalls
+- run your task.
+- close it when it receives a signal to do so.
+
+## More granular control
+Two additional methods are exported that can give a bit more control.
+
+`RunWithClose()`
+- Returns 3 channels of communication (sig, ack, err)
+- Your responsibility to handle these channels
+
+`SignalToClose()`
+- Signals your defined job to Close()
+
+## Small Interface
+
+Implement `RunWithClose()` to extend this package to fit your specific needs.
